@@ -1,17 +1,16 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import LandingPage from './components/LandingPage';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-center text-gray-800 mb-4">
-          📊 Pollify
-        </h1>
-        <p className="text-center text-gray-600 mb-8">
-          Create and share polls instantly
-        </p>
+    <Router>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+        </Routes>
       </div>
-    </div>
+    </Router>
   );
 }
 

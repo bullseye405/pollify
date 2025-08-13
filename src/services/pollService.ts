@@ -1,4 +1,4 @@
-import { supabase, Poll, PollOption, Vote, PollWithOptions, VoteData } from '../lib/supabase';
+import { Poll, PollWithOptions, supabase, VoteData } from '../lib/supabase';
 
 export class PollService {
   // Create a new poll with options

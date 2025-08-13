@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BarChart3, Plus, Trash2, Users, Mail } from 'lucide-react';
+import { PollService } from '../services/pollService';
 
 interface PollOption {
   id: string;
@@ -14,6 +16,8 @@ const LandingPage: React.FC = () => {
   ]);
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [requireNameEmail, setRequireNameEmail] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
   const addOption = () => {
     const newOption: PollOption = {
@@ -35,15 +39,35 @@ const LandingPage: React.FC = () => {
     ));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Create poll logic
-    console.log({
-      question,
-      options: options.filter(opt => opt.text.trim()),
-      allowMultiple,
-      requireNameEmail
-    });
+    
+    if (!isFormValid || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      const validOptions = options.filter(opt => opt.text.trim()).map(opt => opt.text.trim());
+      
+      const result = await PollService.createPoll(
+        question.trim(),
+        validOptions,
+        allowMultiple,
+        requireNameEmail
+      );
+      
+      if (result) {
+        // Navigate to the poll page
+        navigate(`/poll/${result.pollId}`);
+      } else {
+        alert('Failed to create poll. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating poll:', error);
+      alert('Failed to create poll. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isFormValid = question.trim() && options.filter(opt => opt.text.trim()).length >= 2;
@@ -186,10 +210,17 @@ const LandingPage: React.FC = () => {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={!isFormValid}
-            className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+            disabled={!isFormValid || isSubmitting}
+            className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
           >
-            Create Poll
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Creating Poll...
+              </>
+            ) : (
+              'Create Poll'
+            )}
           </button>
         </form>
       </div>

@@ -43,9 +43,11 @@ const AdminDashboard: React.FC = () => {
       );
 
       const totalVotes = pollVoteCounts.reduce((total, item) => total + item.voteCount, 0);
-      const topPollData = pollVoteCounts.reduce((top, current) => 
-        current.voteCount > (top?.voteCount || 0) ? current : top
-      , null);
+      const topPollData = pollVoteCounts.length > 0 
+        ? pollVoteCounts.reduce((top, current) => 
+            current.voteCount > top.voteCount ? current : top
+          )
+        : null;
 
       setStats({
         totalPolls,

@@ -1,0 +1,8 @@
+- show who voted, option to sort by popularity, voted date
+- add pie chart in the result
+- Comments or feedback on polls.
+- Poll sharing (social media, QR code).
+- Limit votes per user/IP/email
+- Mobile-friendly UI enhancements.
+- Poll scheduling (start/end dates, automatic activation/deactivation).
+- Comments or feedback on polls.

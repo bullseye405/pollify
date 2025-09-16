@@ -153,6 +153,78 @@ export class PollService {
     }
   }
 
+  // Get detailed votes for a poll (who voted for what)
+  static async getPollVoteDetails(pollId: string): Promise<{ option_id: string; option_text: string; voters: { name?: string; email?: string; created_at: string }[] }[]> {
+    try {
+      const { data, error } = await supabase
+        .from('pollify_votes')
+        .select(`
+          option_id,
+          name,
+          email,
+          created_at,
+          pollify_poll_options!inner (
+            option_text
+          )
+        `)
+        .eq('poll_id', pollId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching poll vote details:', error);
+        return [];
+      }
+
+      // Group votes by option
+      const votesByOption: { [key: string]: { option_text: string; voters: { name?: string; email?: string; created_at: string }[] } } = {};
+      
+      data?.forEach(vote => {
+        const optionId = vote.option_id;
+        const optionText = (vote.pollify_poll_options as any).option_text;
+        
+        if (!votesByOption[optionId]) {
+          votesByOption[optionId] = { option_text: optionText, voters: [] };
+        }
+        
+        votesByOption[optionId].voters.push({
+          name: vote.name || undefined,
+          email: vote.email || undefined,
+          created_at: vote.created_at
+        });
+      });
+
+      return Object.entries(votesByOption).map(([option_id, data]) => ({
+        option_id,
+        option_text: data.option_text,
+        voters: data.voters
+      }));
+    } catch (error) {
+      console.error('Error in getPollVoteDetails:', error);
+      return [];
+    }
+  }
+
+  // Check if email has already voted
+  static async hasEmailVoted(pollId: string, email: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('pollify_votes')
+        .select('id')
+        .eq('poll_id', pollId)
+        .eq('email', email)
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking if email voted:', error);
+        return false;
+      }
+
+      return (data?.length || 0) > 0;
+    } catch (error) {
+      console.error('Error in hasEmailVoted:', error);
+      return false;
+    }
+  }
   // Toggle poll active status
   static async togglePollStatus(pollId: string, active: boolean): Promise<boolean> {
     try {

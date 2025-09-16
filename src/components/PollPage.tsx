@@ -10,26 +10,37 @@ interface PollResults {
   vote_count: number;
 }
 
+interface PollVoteDetails {
+  option_id: string;
+  option_text: string;
+  voters: { name?: string; email?: string; created_at: string }[];
+}
+
 const PollPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [poll, setPoll] = useState<PollWithOptions | null>(null);
   const [results, setResults] = useState<PollResults[]>([]);
+  const [voteDetails, setVoteDetails] = useState<PollVoteDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
+  const [emailAlreadyVoted, setEmailAlreadyVoted] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [voterName, setVoterName] = useState('');
   const [voterEmail, setVoterEmail] = useState('');
+  const [showVoterDetails, setShowVoterDetails] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadPoll();
       loadResults();
+      loadVoteDetails();
       
       // Subscribe to real-time updates
       const subscription = PollService.subscribeToVotes(id, () => {
         loadResults();
+        loadVoteDetails();
       });
 
       return () => {
@@ -53,6 +64,28 @@ const PollPage: React.FC = () => {
     setResults(resultsData);
   };
 
+  const loadVoteDetails = async () => {
+    if (!id) return;
+    
+    const voteDetailsData = await PollService.getPollVoteDetails(id);
+    setVoteDetails(voteDetailsData);
+  };
+
+  const checkEmailVoted = async (email: string) => {
+    if (!id || !email.trim()) return;
+    
+    const hasVoted = await PollService.hasEmailVoted(id, email.trim());
+    setEmailAlreadyVoted(hasVoted);
+  };
+
+  const handleEmailChange = (email: string) => {
+    setVoterEmail(email);
+    if (poll?.require_name_email && email.trim()) {
+      checkEmailVoted(email.trim());
+    } else {
+      setEmailAlreadyVoted(false);
+    }
+  };
   const handleOptionChange = (optionId: string) => {
     if (!poll) return;
 
@@ -70,11 +103,11 @@ const PollPage: React.FC = () => {
   const handleSubmitVote = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!poll || !id || selectedOptions.length === 0 || voting) return;
+    if (!poll || !id || selectedOptions.length === 0 || voting || emailAlreadyVoted) return;
 
     // Validate required fields
-    if (poll.require_name_email && (!voterName.trim() || !voterEmail.trim())) {
-      alert('Please fill in your name and email.');
+    if (poll.require_name_email && !voterEmail.trim()) {
+      alert('Please fill in your email address.');
       return;
     }
 
@@ -86,7 +119,7 @@ const PollPage: React.FC = () => {
         const voteData: VoteData = {
           poll_id: id,
           option_id: optionId,
-          name: poll.require_name_email ? voterName.trim() : undefined,
+          name: poll.require_name_email && voterName.trim() ? voterName.trim() : undefined,
           email: poll.require_name_email ? voterEmail.trim() : undefined,
         };
         return PollService.submitVote(voteData);
@@ -101,12 +134,18 @@ const PollPage: React.FC = () => {
         setVoterName('');
         setVoterEmail('');
         loadResults(); // Refresh results
+        loadVoteDetails(); // Refresh vote details
       } else {
         alert('Failed to submit vote. Please try again.');
       }
     } catch (error) {
       console.error('Error submitting vote:', error);
-      alert('Failed to submit vote. Please try again.');
+      if (error instanceof Error && error.message.includes('unique_poll_email_vote')) {
+        alert('This email address has already voted on this poll.');
+        setEmailAlreadyVoted(true);
+      } else {
+        alert('Failed to submit vote. Please try again.');
+      }
     } finally {
       setVoting(false);
     }
@@ -121,6 +160,14 @@ const PollPage: React.FC = () => {
     return total > 0 ? Math.round((voteCount / total) * 100) : 0;
   };
 
+  const formatVoterInfo = (voter: { name?: string; email?: string; created_at: string }) => {
+    const parts = [];
+    if (voter.name) parts.push(voter.name);
+    if (voter.email) parts.push(voter.email);
+    const voterInfo = parts.length > 0 ? parts.join(' - ') : 'Anonymous';
+    const date = new Date(voter.created_at).toLocaleDateString();
+    return `${voterInfo} (${date})`;
+  };
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -174,14 +221,14 @@ const PollPage: React.FC = () => {
               {poll.question}
             </h2>
 
-            {poll.active && !hasVoted ? (
+            {poll.active && !hasVoted && !emailAlreadyVoted ? (
               <form onSubmit={handleSubmitVote} className="space-y-6">
                 {/* Voter Information */}
                 {poll.require_name_email && (
                   <div className="space-y-4 pb-4 border-b border-gray-200">
                     <div>
                       <label htmlFor="voterName" className="block text-sm font-medium text-gray-700 mb-2">
-                        Your Name
+                        Your Name (Optional)
                       </label>
                       <input
                         type="text"
@@ -189,21 +236,27 @@ const PollPage: React.FC = () => {
                         value={voterName}
                         onChange={(e) => setVoterName(e.target.value)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                        required
                       />
                     </div>
                     <div>
                       <label htmlFor="voterEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                        Your Email
+                        Your Email *
                       </label>
                       <input
                         type="email"
                         id="voterEmail"
                         value={voterEmail}
-                        onChange={(e) => setVoterEmail(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+                        onChange={(e) => handleEmailChange(e.target.value)}
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
+                          emailAlreadyVoted ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
                         required
                       />
+                      {emailAlreadyVoted && (
+                        <p className="text-red-600 text-sm mt-1">
+                          This email address has already voted on this poll.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -234,7 +287,7 @@ const PollPage: React.FC = () => {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={selectedOptions.length === 0 || voting}
+                  disabled={selectedOptions.length === 0 || voting || emailAlreadyVoted}
                   className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
                 >
                   {voting ? (
@@ -252,11 +305,15 @@ const PollPage: React.FC = () => {
               </form>
             ) : (
               <div className="text-center py-8">
-                {hasVoted ? (
+                {hasVoted || emailAlreadyVoted ? (
                   <div className="text-green-600">
                     <CheckCircle className="w-16 h-16 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold mb-2">Thank you for voting!</h3>
-                    <p className="text-gray-600">Your vote has been recorded.</p>
+                    <h3 className="text-xl font-semibold mb-2">
+                      {hasVoted ? 'Thank you for voting!' : 'Already Voted'}
+                    </h3>
+                    <p className="text-gray-600">
+                      {hasVoted ? 'Your vote has been recorded.' : 'This email has already voted on this poll.'}
+                    </p>
                   </div>
                 ) : (
                   <div className="text-gray-500">
@@ -271,9 +328,19 @@ const PollPage: React.FC = () => {
 
           {/* Results Section */}
           <div className="bg-white rounded-2xl shadow-xl p-8">
-            <h3 className="text-2xl font-semibold text-gray-800 mb-6">
-              Live Results
-            </h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-semibold text-gray-800">
+                Live Results
+              </h3>
+              {poll.require_name_email && voteDetails.length > 0 && (
+                <button
+                  onClick={() => setShowVoterDetails(!showVoterDetails)}
+                  className="text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg hover:bg-indigo-200 transition-colors"
+                >
+                  {showVoterDetails ? 'Hide Details' : 'Show Who Voted'}
+                </button>
+              )}
+            </div>
 
             {results.length > 0 ? (
               <div className="space-y-4">
@@ -297,6 +364,19 @@ const PollPage: React.FC = () => {
                         style={{ width: `${getPercentage(result.vote_count)}%` }}
                       ></div>
                     </div>
+                    
+                    {/* Show voter details if enabled */}
+                    {showVoterDetails && poll.require_name_email && (
+                      <div className="mt-2 ml-4">
+                        {voteDetails
+                          .find(detail => detail.option_id === result.option_id)
+                          ?.voters.map((voter, index) => (
+                            <div key={index} className="text-xs text-gray-500 py-1">
+                              • {formatVoterInfo(voter)}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
